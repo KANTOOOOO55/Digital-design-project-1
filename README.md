@@ -1,32 +1,20 @@
-# Digital-design-project-1
-First group project in digital design 1
+# EventDrivenSimulatorQt (macOS/Qt Creator friendly)
 
-Omar Hassan 900231215
-Habiba Khashaba 900230033
+Open `CMakeLists.txt` in Qt Creator.
 
+## Why this version works better on macOS
+Qt Creator on macOS often launches CMake apps from inside an `.app` bundle, so relative paths like `example.v` may not be found where you expect. This version fixes that by:
 
-# Event-Driven Logic Circuits Simulator
+- copying `example.v` and `example.stim` next to the built executable
+- copying them into the app bundle Resources folder on macOS
+- searching several likely runtime locations automatically
+- allowing no-argument runs for Qt Creator
 
-## Introduction
-Welcome to the Event-Driven Logic Circuits Simulator project! In this project, you'll create a simulator that can model and simulate digital circuits based on events. Using Verilog to describe the circuit, the simulator will react to changes in inputs and update the outputs accordingly. This event-driven approach will help you better understand how digital systems respond to discrete changes over time.
+## Run in Qt Creator
+Just build and press Run.
 
-## What's the Goal?
-The main goal of this project is to get hands-on experience with structural Verilog descriptions and the operation of logic circuit simulators. You'll be building a tool that processes changes (events) in a digital circuit and updates its state based on those changes.
+## Run from terminal
+./EventDrivenSimulatorQt example.v example.stim example.sim
 
-## Key Files You’ll Work With
-- **Verilog File (.v)**: A file where you describe your digital circuit using Verilog. The simulator will support basic logic gates like AND, OR, XOR, and a few others.
-- **Stimuli File (.stim)**: This file contains the input events for your circuit. Each event will specify a change in an input at a particular time.
-- **Simulation Output File (.sim)**: Once the simulation runs, this file records all the events that occurred in the circuit (changes in inputs, wires, and outputs).
-
-## How It Works
-
-### What You Need to Do:
-1. **Verilog Circuit Description**: 
-   You'll provide a Verilog file that describes the digital circuit you want to simulate. Your file will use the following Verilog primitives:
-   - AND, OR, XOR, NAND, NOR, XNOR, BUF, BUFIF1, and NOT.
-
-2. **Input Events (Stimuli)**:
-   The `.stim` file contains the events that happen at the inputs of your circuit. Each event is timestamped and will trigger changes in the circuit. For example:
-   ```text
-   #0 A=0;
-   #500 B=1;
+## Output
+The simulator writes `example.sim` near the executable or in the current working directory.
