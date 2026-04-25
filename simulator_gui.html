@@ -1,0 +1,1210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event-Driven Logic Simulator — Waveform GUI</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #252a35;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --green: #00ff88;
+    --yellow: #ffd600;
+    --red: #ff4d6d;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --text-mid: #94a3b8;
+    --wave-h: 36px;
+    --wave-gap: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+
+  .logo span { color: var(--text-dim); font-weight: 400; }
+
+  .badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(0,229,255,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.25);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    grid-template-rows: 1fr;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ──────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 10px;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: rgba(0,229,255,0.04);
+  }
+
+  .tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .tab-panel.active { display: flex; }
+
+  .panel-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    padding: 12px 14px 6px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    resize: none;
+    outline: none;
+    margin: 0 10px 10px;
+    border-radius: 6px;
+    line-height: 1.6;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-color: var(--accent); }
+
+  .sidebar-footer {
+    padding: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────── */
+  .btn {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+    flex: 1;
+  }
+
+  .btn-primary:hover { background: #33eaff; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text-mid);
+    border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover { border-color: var(--text-mid); color: var(--text); }
+
+  .btn-ghost {
+    background: none;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-mid); }
+
+  /* ── Main area ────────────────────────────────────────────── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .toolbar-title {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .zoom-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .zoom-btn {
+    width: 28px;
+    height: 28px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-mid);
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    font-family: monospace;
+  }
+
+  .zoom-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .zoom-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 50px;
+    text-align: center;
+  }
+
+  /* ── Status bar ───────────────────────────────────────────── */
+  #status {
+    padding: 6px 16px;
+    font-size: 11px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    min-height: 30px;
+    background: var(--surface2);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .status-dot.ok  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.err { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+  .status-dot.run { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: pulse 0.8s infinite; }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── Waveform viewer ──────────────────────────────────────── */
+  .viewer {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .waveform-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .signal-labels {
+    width: 110px;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+  }
+
+  .label-header {
+    height: 30px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  .label-item {
+    height: calc(var(--wave-h) + var(--wave-gap));
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    color: var(--text-mid);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    gap: 6px;
+    cursor: default;
+    transition: background 0.15s;
+  }
+
+  .label-item:hover { background: rgba(255,255,255,0.03); }
+
+  .sig-type {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sig-type.input  { background: var(--accent); }
+  .sig-type.wire   { background: var(--accent2); }
+  .sig-type.output { background: var(--green); }
+
+  .canvas-scroll {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+
+  #waveCanvas {
+    display: block;
+    cursor: crosshair;
+  }
+
+  /* ── Cursor tooltip ───────────────────────────────────────── */
+  #cursor-line {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    background: rgba(0,229,255,0.5);
+    pointer-events: none;
+    display: none;
+  }
+
+  #cursor-tip {
+    position: absolute;
+    top: 0;
+    background: var(--surface2);
+    border: 1px solid var(--accent);
+    padding: 2px 6px;
+    font-size: 10px;
+    color: var(--accent);
+    border-radius: 3px;
+    pointer-events: none;
+    display: none;
+    white-space: nowrap;
+    z-index: 10;
+  }
+
+  /* ── Event log panel ──────────────────────────────────────── */
+  .log-panel {
+    height: 140px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .log-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .log-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 14px;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  .log-entry { display: flex; gap: 12px; }
+  .log-time  { color: var(--accent); min-width: 60px; }
+  .log-sig   { color: var(--text);   min-width: 60px; }
+  .log-val   { color: var(--green); }
+  .log-val.x { color: var(--text-dim); }
+  .log-val.z { color: var(--yellow); }
+
+  /* ── Empty state ──────────────────────────────────────────── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-dim);
+  }
+
+  .empty-icon { font-size: 36px; opacity: 0.4; }
+  .empty-text { font-size: 12px; opacity: 0.6; }
+
+  /* ── scrollbar style ──────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* ── File import ──────────────────────────────────────────── */
+  .file-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 8px;
+    flex-shrink: 0;
+  }
+
+  .file-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    min-width: 32px;
+    letter-spacing: 0.5px;
+  }
+
+  input[type=file] { display: none; }
+
+  .file-btn {
+    flex: 1;
+    padding: 5px 8px;
+    background: var(--surface2);
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.05); }
+  .file-btn.loaded { border-color: var(--green); color: var(--green); border-style: solid; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SimWave<span>.io</span></div>
+  <div class="badge">CSCE2301</div>
+  <div class="badge" style="background:rgba(124,58,237,0.12);color:#a78bfa;border-color:rgba(124,58,237,0.3)">Digital Design I</div>
+  <div class="header-right">
+    <button class="btn btn-ghost" onclick="loadExample()">Load Example</button>
+    <button class="btn btn-primary" onclick="runSim()">▶ Run Simulation</button>
+  </div>
+</header>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="tab-btn active" onclick="switchTab('edit')">EDIT</button>
+      <button class="tab-btn" onclick="switchTab('import')">IMPORT</button>
+    </div>
+
+    <!-- Edit tab -->
+    <div class="tab-panel active" id="tab-edit">
+      <div class="panel-label">Circuit (.v)</div>
+      <textarea id="verilogInput" spellcheck="false" placeholder="module my_circuit (A, B, Y);&#10;  input A, B;&#10;  output Y;&#10;  wire w1;&#10;&#10;  and #(2) G0(Y, A, B);&#10;endmodule"></textarea>
+      <div class="panel-label">Stimuli (.stim)</div>
+      <textarea id="stimInput" spellcheck="false" placeholder="#0 A=0;&#10;#0 B=0;&#10;#100 A=1;&#10;#200 B=1;"></textarea>
+    </div>
+
+    <!-- Import tab -->
+    <div class="tab-panel" id="tab-import">
+      <div class="panel-label">Upload Files</div>
+      <div class="file-row">
+        <span class="file-label">.v</span>
+        <label class="file-btn" id="vLabel" for="vFile">Click to upload .v file</label>
+        <input type="file" id="vFile" accept=".v,.txt" onchange="loadFile(this,'verilogInput','vLabel')">
+      </div>
+      <div class="file-row">
+        <span class="file-label">.stim</span>
+        <label class="file-btn" id="stimLabel" for="stimFile">Click to upload .stim file</label>
+        <input type="file" id="stimFile" accept=".stim,.txt" onchange="loadFile(this,'stimInput','stimLabel')">
+      </div>
+      <div class="file-row">
+        <span class="file-label">.sim</span>
+        <label class="file-btn" id="simLabel" for="simFile">Import .sim output directly</label>
+        <input type="file" id="simFile" accept=".sim,.txt" onchange="loadSimFile(this)">
+      </div>
+      <div style="padding: 8px 14px; font-size: 10px; color: var(--text-dim); line-height: 1.6;">
+        Upload your circuit and stimuli files, then click<br>
+        <span style="color:var(--accent)">▶ Run Simulation</span> to generate waveforms.
+        <br><br>Or import a <span style="color:var(--yellow)">.sim</span> output file directly to visualize.
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+      <button class="btn btn-primary" onclick="runSim()">▶ Simulate</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="toolbar">
+      <span class="toolbar-title">Waveform Viewer</span>
+      <div id="simStats" style="font-size:11px;color:var(--text-dim)"></div>
+      <div class="zoom-group">
+        <button class="zoom-btn" onclick="zoom(-1)">−</button>
+        <span class="zoom-label" id="zoomLabel">1×</span>
+        <button class="zoom-btn" onclick="zoom(1)">+</button>
+        <button class="zoom-btn" onclick="fitZoom()" title="Fit to view" style="font-size:12px">⊡</button>
+      </div>
+    </div>
+
+    <div id="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Load a circuit and stimuli, then click Run.</span>
+    </div>
+
+    <div class="viewer">
+      <div class="waveform-container" id="waveformContainer">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">〜</div>
+          <div class="empty-text">No waveforms yet — run a simulation to see signals</div>
+        </div>
+
+        <!-- Labels + canvas side by side -->
+        <div id="labelsCol" class="signal-labels" style="display:none">
+          <div class="label-header">SIGNAL</div>
+          <div id="labelsList"></div>
+        </div>
+
+        <div class="canvas-scroll" id="canvasScroll" style="display:none">
+          <canvas id="waveCanvas"></canvas>
+          <div id="cursor-line"></div>
+          <div id="cursor-tip"></div>
+        </div>
+      </div>
+
+      <!-- Event log -->
+      <div class="log-panel">
+        <div class="log-header">
+          <span>EVENT LOG</span>
+          <span id="eventCount" style="color:var(--accent)"></span>
+          <button class="btn btn-ghost" style="margin-left:auto;padding:2px 8px;font-size:10px" onclick="exportSim()">Export .sim</button>
+        </div>
+        <div class="log-body" id="logBody">
+          <span style="color:var(--text-dim)">No events yet.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+let simEvents = [];   // [{time, signal, value}]
+let signalOrder = []; // ordered list of signal names
+let signalMeta = {};  // signal -> {type: 'input'|'wire'|'output'}
+let zoomLevel = 1;
+let maxTime = 0;
+
+const WAVE_H   = 36;
+const WAVE_GAP = 8;
+const ROW_H    = WAVE_H + WAVE_GAP;
+const TIME_HEADER = 30;
+const PX_PER_PS_BASE = 0.18;
+
+// ─────────────────────────────────────────────────────────────
+// Tab switching
+// ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    b.classList.toggle('active', (i===0 && name==='edit') || (i===1 && name==='import'));
+  });
+  document.querySelectorAll('.tab-panel').forEach((p,i) => {
+    p.classList.toggle('active', (i===0 && name==='edit') || (i===1 && name==='import'));
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// File loading
+// ─────────────────────────────────────────────────────────────
+function loadFile(input, targetId, labelId) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    document.getElementById(targetId).value = e.target.result;
+    document.getElementById(labelId).textContent = f.name;
+    document.getElementById(labelId).classList.add('loaded');
+    switchTab('edit');
+  };
+  r.readAsText(f);
+}
+
+function loadSimFile(input) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = e => {
+    document.getElementById('simLabel').textContent = f.name;
+    document.getElementById('simLabel').classList.add('loaded');
+    parseAndRenderSimOutput(e.target.result, {});
+  };
+  r.readAsText(f);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PARSER: Verilog
+// ─────────────────────────────────────────────────────────────
+function parseVerilog(text) {
+  const inputs = new Set(), outputs = new Set(), wires = new Set();
+  const gates = [];
+
+  const stripComments = l => l.replace(/\/\/.*/g, '').trim();
+  const lines = text.split('\n').map(stripComments).filter(Boolean);
+
+  const supported = new Set(['and','or','xor','nand','nor','xnor','buf','bufif1','not']);
+
+  for (let line of lines) {
+    if (/^module\b/.test(line) || /^endmodule/.test(line)) continue;
+
+    if (/^input\b/.test(line)) {
+      const rest = line.replace(/^input\s+/, '').replace(/;$/, '');
+      rest.split(',').map(s => s.trim()).filter(Boolean).forEach(s => inputs.add(s));
+    } else if (/^output\b/.test(line)) {
+      const rest = line.replace(/^output\s+/, '').replace(/;$/, '');
+      rest.split(',').map(s => s.trim()).filter(Boolean).forEach(s => outputs.add(s));
+    } else if (/^wire\b/.test(line)) {
+      const rest = line.replace(/^wire\s+/, '').replace(/;$/, '');
+      rest.split(',').map(s => s.trim()).filter(Boolean).forEach(s => wires.add(s));
+    } else {
+      // gate line
+      const m = line.match(/^(\w+)\s*(?:#\((\d+)\))?\s+(\w+)\s*\(([^)]+)\)\s*;/);
+      if (m) {
+        const type = m[1];
+        if (!supported.has(type)) continue;
+        const delay = m[2] ? parseInt(m[2]) : 1;
+        const name  = m[3];
+        const pins  = m[4].split(',').map(s => s.trim());
+        gates.push({ type, name, delay, pins }); // pins[0]=output, rest=inputs
+      }
+    }
+  }
+
+  return { inputs, outputs, wires, gates };
+}
+
+// ─────────────────────────────────────────────────────────────
+// PARSER: Stimuli
+// ─────────────────────────────────────────────────────────────
+function parseStimuli(text) {
+  const events = [];
+  let currentTime = 0;
+  for (let line of text.split('\n')) {
+    line = line.replace(/\/\/.*/g, '').trim();
+    if (!line) continue;
+    if (!line.endsWith(';')) continue;
+    line = line.slice(0, -1).trim();
+    const m = line.match(/^#(\d+)\s+(\w+)=([01xXzZ])/);
+    if (m) {
+      currentTime += parseInt(m[1]);
+      events.push({ time: currentTime, signal: m[2], value: m[3].toLowerCase() });
+    }
+  }
+  return events;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SIMULATOR ENGINE
+// ─────────────────────────────────────────────────────────────
+function logicNot(a) { return a==='0'?'1':a==='1'?'0':'x'; }
+
+function logicAnd(ins) {
+  if (ins.some(c=>c==='0')) return '0';
+  return ins.every(c=>c==='1') ? '1' : 'x';
+}
+function logicOr(ins) {
+  if (ins.some(c=>c==='1')) return '1';
+  return ins.every(c=>c==='0') ? '0' : 'x';
+}
+function logicXor(ins) {
+  if (!ins.every(c=>c==='0'||c==='1')) return 'x';
+  return ins.reduce((p,c) => p ^ (c==='1'?1:0), 0) ? '1' : '0';
+}
+
+function evalGate(gate, signals) {
+  const ins = gate.pins.slice(1).map(p => signals[p] ?? 'x');
+  switch(gate.type) {
+    case 'and':   return logicAnd(ins);
+    case 'or':    return logicOr(ins);
+    case 'xor':   return logicXor(ins);
+    case 'nand':  { const v=logicAnd(ins); return (v==='0'||v==='1')?logicNot(v):'x'; }
+    case 'nor':   { const v=logicOr(ins);  return (v==='0'||v==='1')?logicNot(v):'x'; }
+    case 'xnor':  { const v=logicXor(ins); return (v==='0'||v==='1')?logicNot(v):'x'; }
+    case 'buf':   return ins[0];
+    case 'not':   return logicNot(ins[0]);
+    case 'bufif1':{ const [data,en]=ins; if(en==='1')return data; if(en==='0')return 'z'; return 'x'; }
+    default: return 'x';
+  }
+}
+
+function simulate(circuit, inputEvents) {
+  const { inputs, outputs, wires, gates } = circuit;
+  const signals = {};
+  const simOut  = [];
+  let seqCounter = 0;
+
+  // Init all signals to 'x'
+  [...inputs, ...outputs, ...wires].forEach(s => signals[s] = 'x');
+  gates.forEach(g => { g.pins.forEach(p => { if (!(p in signals)) signals[p]='x'; }); });
+
+  // Fanout map: signal -> list of gate indices
+  const fanout = {};
+  gates.forEach((g, idx) => {
+    g.pins.slice(1).forEach(p => {
+      fanout[p] = fanout[p] || [];
+      fanout[p].push(idx);
+    });
+  });
+
+  // Min-heap event queue (simple array + sort — fine for educational scale)
+  const queue = [];
+  const schedule = (time, signal, value) => {
+    queue.push({ time, signal, value, seq: seqCounter++ });
+    queue.sort((a,b) => a.time!==b.time ? a.time-b.time : a.seq-b.seq);
+  };
+
+  // Seed with input stimuli
+  inputEvents.forEach(ev => schedule(ev.time, ev.signal, ev.value));
+
+  while (queue.length) {
+    const ev = queue.shift();
+    const old = signals[ev.signal] ?? 'x';
+    if (old === ev.value) continue;
+
+    signals[ev.signal] = ev.value;
+    simOut.push({ time: ev.time, signal: ev.signal, value: ev.value });
+
+    (fanout[ev.signal] || []).forEach(idx => {
+      const g = gates[idx];
+      const newOut = evalGate(g, signals);
+      if (newOut !== (signals[g.pins[0]] ?? 'x')) {
+        schedule(ev.time + g.delay, g.pins[0], newOut);
+      }
+    });
+  }
+
+  return simOut;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Run simulation
+// ─────────────────────────────────────────────────────────────
+function setStatus(type, msg) {
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + type;
+  document.getElementById('statusText').textContent = msg;
+}
+
+function runSim() {
+  const vText    = document.getElementById('verilogInput').value.trim();
+  const stimText = document.getElementById('stimInput').value.trim();
+
+  if (!vText)    { setStatus('err','Missing circuit file content.'); return; }
+  if (!stimText) { setStatus('err','Missing stimuli file content.'); return; }
+
+  setStatus('run','Simulating…');
+
+  try {
+    const circuit = parseVerilog(vText);
+    const inputEvts = parseStimuli(stimText);
+
+    if (circuit.gates.length === 0 && circuit.inputs.size === 0) {
+      throw new Error('Could not parse any gates or inputs from the circuit file.');
+    }
+
+    const events = simulate(circuit, inputEvts);
+
+    // Build meta
+    const meta = {};
+    circuit.inputs.forEach(s  => meta[s] = 'input');
+    circuit.outputs.forEach(s => meta[s] = 'output');
+    circuit.wires.forEach(s   => meta[s] = 'wire');
+    events.forEach(ev => { if (!meta[ev.signal]) meta[ev.signal] = 'wire'; });
+
+    parseAndRenderSimOutput(
+      events.map(e => `${e.time}, ${e.signal}, ${e.value}`).join('\n'),
+      meta,
+      { inputs: circuit.inputs, outputs: circuit.outputs }
+    );
+
+    setStatus('ok', `Simulation complete — ${events.length} events across ${[...circuit.inputs].length} inputs, ${[...circuit.outputs].length} outputs, ${[...circuit.wires].length} wires.`);
+    document.getElementById('simStats').textContent =
+      `${events.length} events · ${[...circuit.inputs,...circuit.outputs,...circuit.wires].length} signals`;
+
+  } catch(e) {
+    setStatus('err', 'Error: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Parse & render .sim output (also used when importing .sim directly)
+// ─────────────────────────────────────────────────────────────
+function parseAndRenderSimOutput(text, meta, circuitInfo) {
+  const events = [];
+  for (let line of text.split('\n')) {
+    line = line.trim(); if (!line) continue;
+    const parts = line.split(',').map(s=>s.trim());
+    if (parts.length >= 3) {
+      events.push({ time: parseInt(parts[0]), signal: parts[1], value: parts[2] });
+    }
+  }
+
+  if (events.length === 0) { setStatus('err','No events found in output.'); return; }
+
+  simEvents = events;
+
+  // Determine signal order: inputs first, then wires, then outputs
+  const seen = new Set();
+  const ordered = [];
+  const pushIfNew = s => { if (!seen.has(s)) { seen.add(s); ordered.push(s); } };
+
+  if (circuitInfo && circuitInfo.inputs) circuitInfo.inputs.forEach(pushIfNew);
+  events.forEach(ev => { if (meta[ev.signal]==='wire') pushIfNew(ev.signal); });
+  if (circuitInfo && circuitInfo.outputs) circuitInfo.outputs.forEach(pushIfNew);
+  events.forEach(ev => pushIfNew(ev.signal));
+
+  signalOrder = ordered;
+  signalMeta  = meta;
+  maxTime = Math.max(...events.map(e=>e.time));
+
+  renderAll();
+  renderLog();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Zoom
+// ─────────────────────────────────────────────────────────────
+const ZOOM_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
+let zoomIdx = 3;
+
+function zoom(dir) {
+  zoomIdx = Math.max(0, Math.min(ZOOM_STEPS.length-1, zoomIdx+dir));
+  zoomLevel = ZOOM_STEPS[zoomIdx];
+  document.getElementById('zoomLabel').textContent = zoomLevel + '×';
+  if (simEvents.length) renderAll();
+}
+
+function fitZoom() {
+  if (!simEvents.length) return;
+  const container = document.getElementById('canvasScroll');
+  const availW = container.clientWidth - 20;
+  const totalPx = maxTime * PX_PER_PS_BASE;
+  const fit = availW / totalPx;
+  // Find nearest zoom step
+  let best = 0;
+  ZOOM_STEPS.forEach((z,i) => { if (z <= fit) best = i; });
+  zoomIdx = best;
+  zoomLevel = ZOOM_STEPS[zoomIdx];
+  document.getElementById('zoomLabel').textContent = zoomLevel + '×';
+  renderAll();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Build timeline from events for one signal
+// ─────────────────────────────────────────────────────────────
+function buildTimeline(signal) {
+  // Returns [{time, value}] segments for the full simulation time
+  const evts = simEvents.filter(e=>e.signal===signal).sort((a,b)=>a.time-b.time);
+  if (!evts.length) return [];
+
+  const tl = [];
+  let val = 'x';
+  tl.push({ time: 0, value: val });
+
+  for (const ev of evts) {
+    if (ev.time > 0 && tl[tl.length-1].time < ev.time) {
+      tl.push({ time: ev.time, value: val }); // hold previous value up to this point
+    }
+    val = ev.value;
+    tl.push({ time: ev.time, value: val });
+  }
+
+  tl.push({ time: maxTime + maxTime * 0.05, value: val });
+  return tl;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Canvas rendering
+// ─────────────────────────────────────────────────────────────
+const COLORS = {
+  '0': '#00e5ff',
+  '1': '#00ff88',
+  'x': '#64748b',
+  'z': '#ffd600',
+};
+
+const BG_COLORS = {
+  '0': 'rgba(0,229,255,0.04)',
+  '1': 'rgba(0,255,136,0.06)',
+  'x': 'rgba(100,116,139,0.08)',
+  'z': 'rgba(255,214,0,0.06)',
+};
+
+function renderAll() {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('labelsCol').style.display = '';
+  document.getElementById('canvasScroll').style.display = '';
+
+  const pxPerPs = PX_PER_PS_BASE * zoomLevel;
+  const canvasW = Math.max(800, maxTime * pxPerPs + 80);
+  const canvasH = TIME_HEADER + signalOrder.length * ROW_H + 10;
+
+  const canvas = document.getElementById('waveCanvas');
+  canvas.width  = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext('2d');
+
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Background
+  ctx.fillStyle = '#0a0c10';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // Grid lines (vertical at nice intervals)
+  const interval = chooseInterval(pxPerPs);
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (let t = 0; t <= maxTime + interval; t += interval) {
+    const x = t * pxPerPs;
+    ctx.beginPath(); ctx.moveTo(x, TIME_HEADER); ctx.lineTo(x, canvasH);
+    ctx.stroke();
+  }
+
+  // Time axis labels
+  ctx.font = '10px "JetBrains Mono"';
+  ctx.fillStyle = '#475569';
+  ctx.textAlign = 'center';
+  for (let t = 0; t <= maxTime + interval; t += interval) {
+    const x = t * pxPerPs;
+    ctx.fillText(t + 'ps', x, 18);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, 22); ctx.lineTo(x, TIME_HEADER);
+    ctx.stroke();
+  }
+
+  // Render each signal's waveform
+  signalOrder.forEach((sig, idx) => {
+    const y = TIME_HEADER + idx * ROW_H;
+    renderWave(ctx, sig, y, pxPerPs, canvasW);
+  });
+
+  // Build labels
+  const labelsList = document.getElementById('labelsList');
+  labelsList.innerHTML = '';
+  signalOrder.forEach(sig => {
+    const type = signalMeta[sig] || 'wire';
+    const div = document.createElement('div');
+    div.className = 'label-item';
+    div.innerHTML = `<div class="sig-type ${type}"></div><span title="${sig}">${sig}</span>`;
+    labelsList.appendChild(div);
+  });
+
+  // Setup cursor
+  setupCursor(pxPerPs);
+
+  document.getElementById('eventCount').textContent = simEvents.length + ' events';
+}
+
+function chooseInterval(pxPerPs) {
+  const candidates = [50,100,200,500,1000,2000,5000,10000];
+  for (const c of candidates) {
+    if (c * pxPerPs >= 60) return c;
+  }
+  return candidates[candidates.length-1];
+}
+
+function renderWave(ctx, signal, yTop, pxPerPs, canvasW) {
+  const tl = buildTimeline(signal);
+  if (!tl.length) return;
+
+  const LOW  = yTop + WAVE_H - 4;
+  const HIGH = yTop + 4;
+  const MID  = yTop + WAVE_H / 2;
+
+  // Fill BG stripe for current signal row
+  ctx.fillStyle = 'rgba(255,255,255,0.015)';
+  ctx.fillRect(0, yTop, canvasW, WAVE_H);
+
+  // Horizontal separator
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, yTop + WAVE_H); ctx.lineTo(canvasW, yTop + WAVE_H); ctx.stroke();
+
+  // Draw wave segments
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+
+  for (let i = 0; i < tl.length - 1; i++) {
+    const seg = tl[i];
+    const next = tl[i+1];
+    const x1 = seg.time  * pxPerPs;
+    const x2 = next.time * pxPerPs;
+    const val = seg.value;
+    const color = COLORS[val] || COLORS['x'];
+
+    // Background fill for this segment
+    ctx.fillStyle = BG_COLORS[val] || BG_COLORS['x'];
+    ctx.fillRect(x1, yTop, x2-x1, WAVE_H);
+
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+
+    if (val === 'x') {
+      // Hashed X
+      ctx.setLineDash([4,3]);
+      ctx.moveTo(x1, MID); ctx.lineTo(x2, MID);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // X label
+      if (x2-x1 > 20) {
+        ctx.fillStyle = COLORS['x'];
+        ctx.font = '10px "JetBrains Mono"';
+        ctx.textAlign = 'center';
+        ctx.fillText('X', (x1+x2)/2, MID+4);
+      }
+    } else if (val === 'z') {
+      // Dashed Z at midpoint
+      ctx.setLineDash([6,4]);
+      ctx.moveTo(x1, MID); ctx.lineTo(x2, MID);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (x2-x1 > 20) {
+        ctx.fillStyle = COLORS['z'];
+        ctx.font = '10px "JetBrains Mono"';
+        ctx.textAlign = 'center';
+        ctx.fillText('Z', (x1+x2)/2, MID+4);
+      }
+    } else {
+      const y = val==='1' ? HIGH : LOW;
+      ctx.moveTo(x1, y); ctx.lineTo(x2, y);
+      ctx.stroke();
+
+      // Transition edge at x1 (if previous value differs)
+      if (i > 0 && tl[i-1].value !== val) {
+        const prevY = tl[i-1].value==='1' ? HIGH : LOW;
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.moveTo(x1, prevY); ctx.lineTo(x1, y);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Cursor interaction
+// ─────────────────────────────────────────────────────────────
+function setupCursor(pxPerPs) {
+  const canvasScroll = document.getElementById('canvasScroll');
+  const cursorLine   = document.getElementById('cursor-line');
+  const cursorTip    = document.getElementById('cursor-tip');
+  const canvas       = document.getElementById('waveCanvas');
+
+  canvas.onmousemove = (e) => {
+    const rect   = canvas.getBoundingClientRect();
+    const xInCanvas = e.clientX - rect.left + canvasScroll.scrollLeft;
+    const time   = Math.round(xInCanvas / pxPerPs);
+
+    cursorLine.style.display = 'block';
+    cursorLine.style.left    = xInCanvas + 'px';
+    cursorLine.style.height  = canvas.height + 'px';
+
+    // Build tooltip: show value of each signal at this time
+    const vals = signalOrder.map(sig => {
+      const tl = buildTimeline(sig);
+      let val = 'x';
+      for (const seg of tl) { if (seg.time <= time) val = seg.value; }
+      return `${sig}=${val}`;
+    }).join('  ');
+
+    cursorTip.style.display = 'block';
+    cursorTip.style.left = (xInCanvas + 8) + 'px';
+    cursorTip.style.top  = '4px';
+    cursorTip.textContent = `${time}ps  |  ${vals}`;
+  };
+
+  canvas.onmouseleave = () => {
+    cursorLine.style.display = 'none';
+    cursorTip.style.display  = 'none';
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Event log
+// ─────────────────────────────────────────────────────────────
+function renderLog() {
+  const body = document.getElementById('logBody');
+  if (!simEvents.length) { body.innerHTML = '<span style="color:var(--text-dim)">No events.</span>'; return; }
+
+  body.innerHTML = simEvents.map(ev => {
+    const cls = ['x','z'].includes(ev.value) ? ev.value : '';
+    return `<div class="log-entry">
+      <span class="log-time">${ev.time}ps</span>
+      <span class="log-sig">${ev.signal}</span>
+      <span class="log-val ${cls}">→ ${ev.value}</span>
+    </div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Export .sim
+// ─────────────────────────────────────────────────────────────
+function exportSim() {
+  if (!simEvents.length) return;
+  const text = simEvents.map(e => `${e.time}, ${e.signal}, ${e.value}`).join('\n');
+  const blob = new Blob([text], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'output.sim';
+  a.click();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Clear
+// ─────────────────────────────────────────────────────────────
+function clearAll() {
+  document.getElementById('verilogInput').value = '';
+  document.getElementById('stimInput').value = '';
+  simEvents = []; signalOrder = []; signalMeta = {};
+  document.getElementById('emptyState').style.display = '';
+  document.getElementById('labelsCol').style.display = 'none';
+  document.getElementById('canvasScroll').style.display = 'none';
+  document.getElementById('logBody').innerHTML = '<span style="color:var(--text-dim)">No events yet.</span>';
+  document.getElementById('eventCount').textContent = '';
+  document.getElementById('simStats').textContent = '';
+  setStatus('', 'Cleared. Load a circuit and stimuli to begin.');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Load example (the one from the project PDF)
+// ─────────────────────────────────────────────────────────────
+function loadExample() {
+  document.getElementById('verilogInput').value =
+`module example (A, B, C, D, Y);
+  input A, B, C, D;
+  output Y;
+  wire w1, w2, w3;
+
+  and  #(2) G0(w1, A, B);
+  not  #(1) G1(w2, C);
+  xor  #(3) G2(w3, w1, w2);
+  or   #(2) G3(Y, w3, D);
+endmodule`;
+
+  document.getElementById('stimInput').value =
+`#0 A=0;
+#0 B=0;
+#0 C=0;
+#0 D=0;
+#100 A=1;
+#100 B=1;
+#150 C=1;
+#100 D=1;
+#200 A=0;
+#100 C=0;
+#100 D=0;
+#100 B=0;`;
+
+  switchTab('edit');
+  runSim();
+}
+
+// Auto-load example on start
+window.onload = () => loadExample();
+</script>
+</body>
+</html>
