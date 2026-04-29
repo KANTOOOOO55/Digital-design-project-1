@@ -14,24 +14,39 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+// If CMake doesn't pass the project source directory, fall back to current directory.
+// This helps the simulator find the example files when run from different locations.
 #ifndef PROJECT_SOURCE_DIR
 #define PROJECT_SOURCE_DIR "."
 #endif
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Data Structures
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Represents one gate in the circuit (e.g., "and #(2) G0(w1, A, B)").
+// pins[0] is always the output; pins[1..] are the inputs.
+// This maps directly to how structural Verilog primitives are written.
 struct Gate {
-    string type;
-    string name;
-    long long delay_ps = 1;
-    vector<string> pins; // pins[0] = output, remaining = inputs
+    string type;              // Gate kind: and, or, xor, not, bufif1, etc.
+    string name;              // Instance name: G0, G1, etc.
+    long long delay_ps = 1;   // How many picoseconds before the output reacts to an input change
+    vector<string> pins;      // pins[0] = output signal, pins[1..] = input signals
 };
 
+// Represents one event in the simulation — a signal changing its value at a specific time.
+// We store a sequence number so that two events at the same timestamp always
+// process in a consistent order, making the output deterministic across runs.
 struct Event {
-    long long time_ps;
-    string signal;
-    char value;
-    long long seq;
+    long long time_ps;   // Absolute simulation time when this change happens
+    string signal;       // Which signal is changing
+    char value;          // New value: '0', '1', 'x' (unknown), or 'z' (high-impedance)
+    long long seq;       // Tie-breaker: lower seq = processed first at same timestamp
 };
 
+// Custom comparator that makes std::priority_queue behave as a min-heap.
+// The earliest event (smallest time_ps) always comes out first.
+// If two events share the same timestamp, the one scheduled earlier (lower seq) wins.
 struct EventCompare {
     bool operator()(const Event& a, const Event& b) const {
         if (a.time_ps != b.time_ps) return a.time_ps > b.time_ps;
@@ -39,6 +54,11 @@ struct EventCompare {
     }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// String Utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Strips leading and trailing whitespace from a string.
 static string trim(const string& s) {
     size_t i = 0;
     while (i < s.size() && isspace(static_cast<unsigned char>(s[i]))) ++i;
@@ -49,10 +69,12 @@ static string trim(const string& s) {
     return s.substr(i, j - i);
 }
 
+// Returns true if string s begins with the given prefix.
 static bool startsWith(const string& s, const string& prefix) {
     return s.rfind(prefix, 0) == 0;
 }
 
+// Removes everything after // on a line (inline Verilog-style comments).
 static void stripComment(string& line) {
     size_t pos = line.find("//");
     if (pos != string::npos) {
@@ -60,6 +82,7 @@ static void stripComment(string& line) {
     }
 }
 
+// Splits a comma-separated string like "w1, A, B" into a vector {"w1", "A", "B"}.
 static vector<string> splitCSV(const string& s) {
     vector<string> out;
     string token;
@@ -72,14 +95,25 @@ static vector<string> splitCSV(const string& s) {
     return out;
 }
 
+// Converts a logic value character to lowercase and validates it.
+// Accepts '0', '1', 'x'/'X' (unknown), 'z'/'Z' (high-impedance).
+// Throws if the character is anything else.
 static char normalizeLogic(char c) {
     c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
     if (c == '0' || c == '1' || c == 'x' || c == 'z') return c;
     throw runtime_error(string("Invalid logic value: ") + c);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Simulator Class
+// ─────────────────────────────────────────────────────────────────────────────
 class Simulator {
 public:
+
+    // Reads and parses a structural Verilog file.
+    // Extracts all input/output/wire declarations and gate instantiations.
+    // After loading, every declared signal is set to 'x' (unknown) so that
+    // any time-0 stimulus that assigns a known value will register as a real change.
     void loadCircuit(const fs::path& filename) {
         ifstream fin(filename);
         if (!fin) {
@@ -92,6 +126,7 @@ public:
             line = trim(line);
             if (line.empty()) continue;
 
+            // Skip the module header and endmodule — we only care about what's inside.
             if (startsWith(line, "module") || startsWith(line, "endmodule")) {
                 continue;
             }
@@ -107,13 +142,18 @@ public:
             }
         }
 
-        // Initialize known circuit signals to 'x' so time-0 input assignments
-        // are recorded in the .sim output.
+        // Initialize all declared signals to 'x'.
+        // This is important: if we left them uninitialized, time-0 stimuli that
+        // set a signal to '0' might not be recorded because '0' == default.
+        // Starting at 'x' guarantees every first assignment is captured.
         for (const auto& s : inputs_)  signals_[s] = 'x';
         for (const auto& s : outputs_) signals_[s] = 'x';
         for (const auto& s : wires_)   signals_[s] = 'x';
     }
 
+    // Reads the stimuli file and schedules all input events onto the priority queue.
+    // Each delay in the file is RELATIVE to the previous event (not absolute),
+    // so we accumulate a running total to get the absolute timestamp for each event.
     void loadStimuli(const fs::path& filename) {
         ifstream fin(filename);
         if (!fin) {
@@ -139,6 +179,7 @@ public:
                 throw runtime_error("Stimulus line must start with '#': " + line);
             }
 
+            // Split "#100 A=1" into delay "100" and assignment "A=1".
             size_t space_pos = line.find_first_of(" \t");
             if (space_pos == string::npos) {
                 throw runtime_error("Invalid stimulus format: " + line);
@@ -147,6 +188,7 @@ public:
             string delay_str = line.substr(1, space_pos - 1);
             string assign = trim(line.substr(space_pos + 1));
 
+            // Add the relative delay to our running clock.
             long long delta = stoll(delay_str);
             current_time += delta;
 
@@ -164,7 +206,7 @@ public:
 
             char logic = normalizeLogic(val[0]);
 
-            // Allow only signals already declared as inputs/outputs/wires.
+            // Only allow signals that were declared in the circuit file.
             if (!signals_.count(sig)) {
                 throw runtime_error("Stimulus references unknown signal: " + sig);
             }
@@ -173,6 +215,10 @@ public:
         }
     }
 
+    // Runs the simulation and writes every signal transition to the output file.
+    // The loop pulls the earliest event from the priority queue, applies the change,
+    // then re-evaluates only the gates that depend on the changed signal (via the
+    // fanout map). New gate output events are scheduled with the gate's delay added.
     void run(const fs::path& outfile) {
         ofstream fout(outfile);
         if (!fout) {
@@ -184,11 +230,17 @@ public:
             events_.pop();
 
             char old_val = valueOf(ev.signal);
+
+            // If the signal already holds this value, skip the event.
+            // This handles reconvergent paths where two different propagation
+            // chains schedule the same output change — we only record it once.
             if (old_val == ev.value) continue;
 
+            // Apply the change and write it to the .sim output file.
             signals_[ev.signal] = ev.value;
             fout << ev.time_ps << ", " << ev.signal << ", " << ev.value << "\n";
 
+            // Look up which gates read this signal, then re-evaluate each of them.
             auto it = fanout_.find(ev.signal);
             if (it == fanout_.end()) continue;
 
@@ -197,6 +249,8 @@ public:
                 char new_out = evalGate(g);
                 const string& out_sig = g.pins[0];
 
+                // Only schedule a new event if the gate output actually changed.
+                // Scheduling when there's no change would create ghost events.
                 if (new_out != valueOf(out_sig)) {
                     schedule(ev.time_ps + g.delay_ps, out_sig, new_out);
                 }
@@ -205,19 +259,26 @@ public:
     }
 
 private:
-    vector<Gate> gates_;
-    unordered_set<string> inputs_, outputs_, wires_;
-    unordered_map<string, char> signals_;
-    unordered_map<string, vector<int>> fanout_;
-    priority_queue<Event, vector<Event>, EventCompare> events_;
-    long long seq_counter_ = 0;
+    // ── Circuit data ────────────────────────────────────────────────────────
+    vector<Gate>                        gates_;    // All gate instances in the circuit
+    unordered_set<string>               inputs_;   // Declared input signals
+    unordered_set<string>               outputs_;  // Declared output signals
+    unordered_set<string>               wires_;    // Declared internal wires
+    unordered_map<string, char>         signals_;  // Current logic value of every signal
+    unordered_map<string, vector<int>>  fanout_;   // Signal -> indices of gates that read it
 
+    // ── Event queue ─────────────────────────────────────────────────────────
+    priority_queue<Event, vector<Event>, EventCompare> events_;
+    long long seq_counter_ = 0;  // Increments with every scheduled event for tie-breaking
+
+    // Returns the current value of a signal, defaulting to 'x' if not yet seen.
     char valueOf(const string& signal) const {
         auto it = signals_.find(signal);
         if (it == signals_.end()) return 'x';
         return it->second;
     }
 
+    // Parses a declaration like "input A, B, C;" and inserts each name into dest.
     void parseDeclaration(const string& line, unordered_set<string>& dest) {
         size_t first_space = line.find(' ');
         if (first_space == string::npos) {
@@ -234,6 +295,9 @@ private:
         }
     }
 
+    // Parses a gate line like "and #(2) G0(w1, A, B);" and stores the gate.
+    // Also registers each input pin in the fanout map so we know which gates
+    // to re-evaluate when a signal changes.
     void parseGate(const string& line) {
         string text = trim(line);
         if (text.empty() || text.back() != ';') {
@@ -252,6 +316,7 @@ private:
         g.type = trim(text.substr(0, first_space));
         string rest = trim(text.substr(first_space + 1));
 
+        // Only these nine primitives are supported per the project spec.
         static const unordered_set<string> supported = {
             "and", "or", "xor", "nand", "nor", "xnor", "buf", "bufif1", "not"
         };
@@ -260,7 +325,7 @@ private:
             throw runtime_error("Unsupported gate type: " + g.type);
         }
 
-        // Optional delay: #(number)
+        // Parse the optional propagation delay: #(2) or #2
         if (startsWith(rest, "#")) {
             size_t open = rest.find('(');
             size_t close = rest.find(')');
@@ -277,6 +342,7 @@ private:
             rest = trim(rest.substr(close + 1));
         }
 
+        // Parse the instance name and pin list: G0(w1, A, B)
         size_t left_paren = rest.find('(');
         size_t right_paren = rest.rfind(')');
         if (left_paren == string::npos || right_paren == string::npos || right_paren < left_paren) {
@@ -295,12 +361,14 @@ private:
             throw runtime_error("Gate must have output and at least one input: " + line);
         }
 
+        // buf and not are single-input gates — validate pin count.
         if (g.type == "buf" || g.type == "not") {
             if (g.pins.size() != 2) {
                 throw runtime_error(g.type + " requires exactly 1 input: " + line);
             }
         }
 
+        // bufif1 needs exactly: output, data input, enable input.
         if (g.type == "bufif1") {
             if (g.pins.size() != 3) {
                 throw runtime_error("bufif1 requires output, data, enable: " + line);
@@ -310,20 +378,25 @@ private:
         int idx = static_cast<int>(gates_.size());
         gates_.push_back(g);
 
-        // Output signal
+        // Make sure the output pin has an entry in the signal table.
         if (!signals_.count(g.pins[0])) signals_[g.pins[0]] = 'x';
 
-        // Input signals
+        // Register each input pin in the fanout map and the signal table.
         for (size_t i = 1; i < g.pins.size(); ++i) {
             if (!signals_.count(g.pins[i])) signals_[g.pins[i]] = 'x';
             fanout_[g.pins[i]].push_back(idx);
         }
     }
 
+    // Pushes a new event onto the priority queue with the next sequence number.
     void schedule(long long time_ps, const string& signal, char value) {
         events_.push(Event{time_ps, signal, value, seq_counter_++});
     }
 
+    // ── Logic evaluation ─────────────────────────────────────────────────────
+
+    // Returns true only for definite 0 or 1 — not x or z.
+    // Used to prevent inverting an unknown value in NAND/NOR/XNOR.
     static bool isKnown01(char c) {
         return c == '0' || c == '1';
     }
@@ -331,9 +404,10 @@ private:
     static char logicNot(char a) {
         if (a == '0') return '1';
         if (a == '1') return '0';
-        return 'x';
+        return 'x';  // unknown stays unknown
     }
 
+    // AND: any 0 forces output to 0; all 1s gives 1; anything else is unknown.
     static char logicAnd(const vector<char>& in) {
         bool all_one = true;
         for (char c : in) {
@@ -343,6 +417,7 @@ private:
         return all_one ? '1' : 'x';
     }
 
+    // OR: any 1 forces output to 1; all 0s gives 0; anything else is unknown.
     static char logicOr(const vector<char>& in) {
         bool all_zero = true;
         for (char c : in) {
@@ -352,6 +427,8 @@ private:
         return all_zero ? '0' : 'x';
     }
 
+    // XOR: counts the parity of 1-bits across all inputs.
+    // Returns 'x' if any input is unknown — we can't determine parity.
     static char logicXor(const vector<char>& in) {
         int parity = 0;
         for (char c : in) {
@@ -361,37 +438,41 @@ private:
         return parity ? '1' : '0';
     }
 
+    // Evaluates a gate by reading its current input values and applying gate logic.
+    // NAND/NOR/XNOR use isKnown01() before inverting to avoid turning 'x' into
+    // a wrong binary value.
     char evalGate(const Gate& g) const {
         vector<char> in;
         for (size_t i = 1; i < g.pins.size(); ++i) {
             in.push_back(valueOf(g.pins[i]));
         }
 
-        if (g.type == "and")   return logicAnd(in);
-        if (g.type == "or")    return logicOr(in);
-        if (g.type == "xor")   return logicXor(in);
+        if (g.type == "and")  return logicAnd(in);
+        if (g.type == "or")   return logicOr(in);
+        if (g.type == "xor")  return logicXor(in);
+
         if (g.type == "nand") {
             char v = logicAnd(in);
-            return (v == '0' || v == '1') ? logicNot(v) : 'x';
+            return isKnown01(v) ? logicNot(v) : 'x';
         }
         if (g.type == "nor") {
             char v = logicOr(in);
-            return (v == '0' || v == '1') ? logicNot(v) : 'x';
+            return isKnown01(v) ? logicNot(v) : 'x';
         }
         if (g.type == "xnor") {
             char v = logicXor(in);
-            return (v == '0' || v == '1') ? logicNot(v) : 'x';
+            return isKnown01(v) ? logicNot(v) : 'x';
         }
-        if (g.type == "buf") {
-            return in[0];
-        }
-        if (g.type == "not") {
-            return logicNot(in[0]);
-        }
-        if (g.type == "bufif1") {
-            char data = in[0];
-            char enable = in[1];
 
+        if (g.type == "buf") return in[0];
+        if (g.type == "not") return logicNot(in[0]);
+
+        if (g.type == "bufif1") {
+            char data   = in[0];
+            char enable = in[1];
+            // enable=1 → pass data through
+            // enable=0 → output is high-impedance (disconnected)
+            // enable=x → we can't determine the state
             if (enable == '1') return data;
             if (enable == '0') return 'z';
             return 'x';
@@ -401,6 +482,13 @@ private:
     }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// File Path Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Builds a list of directories to search for input files.
+// We check the current directory, the directory containing the executable,
+// parent folders (for macOS app bundles), and the CMake source directory.
 static vector<fs::path> candidateDirectories(const char* argv0) {
     vector<fs::path> dirs;
     dirs.push_back(fs::current_path());
@@ -420,6 +508,9 @@ static vector<fs::path> candidateDirectories(const char* argv0) {
     return dirs;
 }
 
+// Searches multiple candidate directories for a file by name.
+// This lets the simulator find input files whether you run it from
+// the build folder, the source folder, or inside a macOS app bundle.
 static fs::path findExistingFile(const string& name, const char* argv0) {
     fs::path given(name);
 
@@ -437,6 +528,8 @@ static fs::path findExistingFile(const string& name, const char* argv0) {
     );
 }
 
+// Chooses a writable location for the output file, trying each candidate
+// directory until one accepts a write. Falls back to the current directory.
 static fs::path defaultOutputPath(const string& name, const char* argv0) {
     fs::path out(name);
     if (out.is_absolute()) return out;
@@ -456,12 +549,17 @@ static fs::path defaultOutputPath(const string& name, const char* argv0) {
     return fs::absolute(out);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Entry Point
+// ─────────────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
+    // Default to the bundled example files if no arguments are given.
     string circuitName = "example.v";
     string stimuliName = "example.stim";
     string outputName  = "example.sim";
 
     if (argc == 4) {
+        // Use files provided on the command line.
         circuitName = argv[1];
         stimuliName = argv[2];
         outputName  = argv[3];
